@@ -1,128 +1,126 @@
-import os
-import psycopg2
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from dotenv import load_dotenv
 import logging
-import requests
-from fastapi import FastAPI
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, CallbackContext
+from flask import Flask, request
+import os
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Telegram API Key and Webhook URL from .env
-TELEGRAM_API_KEY = os.getenv("TELEGRAM_API_KEY")
-DATABASE_URL = os.getenv("DATABASE_URL")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-
-# Setup logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Setting up logging for the bot
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Database Connection
-conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-cursor = conn.cursor()
+# Initialize Flask application
+app = Flask(__name__)
 
-# FastAPI application
-app = FastAPI()
+# GitHub user.txt file location
+USER_FILE_PATH = "https://raw.githubusercontent.com/yourusername/yourrepo/main/user.txt"
 
-# Webhook function
-async def set_webhook():
-    url = f"https://api.telegram.org/bot{TELEGRAM_API_KEY}/setWebhook?url={WEBHOOK_URL}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        print("Webhook set successfully.")
-    else:
-        print(f"Error setting webhook: {response.text}")
+# Helper functions to read and write user data
+def read_user_data():
+    try:
+        # Read the user data file from GitHub (or you can use another file storage method)
+        import requests
+        response = requests.get(USER_FILE_PATH)
+        return response.text.splitlines()
+    except Exception as e:
+        logger.error(f"Error reading user data: {e}")
+        return []
 
-# Handle '/start' command
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
-    cursor.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
-    result = cursor.fetchone()
+def save_user_data(chat_id, data):
+    try:
+        # Save user data to GitHub or a text file
+        with open('user.txt', 'a') as file:
+            file.write(f"{chat_id},{data['whatsapp']},{data['telegram_username']}\n")
+    except Exception as e:
+        logger.error(f"Error saving user data: {e}")
 
-    if result:
-        buttons = [
-            [InlineKeyboardButton("Login", callback_data='login')],
-            [InlineKeyboardButton("SignUp", callback_data='signup')]
+# Command handlers
+def start(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    keyboard = [
+        [InlineKeyboardButton("Signin", callback_data="signin")],
+        [InlineKeyboardButton("Signup", callback_data="signup")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text('Welcome! Choose an option:', reply_markup=reply_markup)
+
+def signup(update: Update, context: CallbackContext):
+    keyboard = [
+        [InlineKeyboardButton("Back", callback_data="start")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.callback_query.answer()
+    update.callback_query.edit_message_text('Please enter your WhatsApp number and Telegram username (separate by comma):', reply_markup=reply_markup)
+    return 'awaiting_signup'
+
+def handle_signup_input(update: Update, context: CallbackContext):
+    user_input = update.message.text
+    if "," in user_input:
+        whatsapp, telegram_username = user_input.split(",", 1)
+        context.user_data['whatsapp'] = whatsapp.strip()
+        context.user_data['telegram_username'] = telegram_username.strip()
+
+        keyboard = [
+            [InlineKeyboardButton("Confirm", callback_data="confirm_signup")],
+            [InlineKeyboardButton("Back", callback_data="start")]
         ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text('Confirm your information:', reply_markup=reply_markup)
     else:
-        buttons = [
-            [InlineKeyboardButton("SignUp", callback_data='signup')]
-        ]
+        update.message.reply_text('Invalid input. Please enter your WhatsApp number and Telegram username, separated by a comma.')
 
-    reply_markup = InlineKeyboardMarkup(buttons)
-    await update.message.reply_text("Welcome! Please choose an option:", reply_markup=reply_markup)
+def confirm_signup(update: Update, context: CallbackContext):
+    chat_id = update.callback_query.message.chat_id
+    data = context.user_data
+    save_user_data(chat_id, data)
+    update.callback_query.answer()
+    update.callback_query.edit_message_text("Signup successful. You can now login.")
 
-# Handle SignUp button
-async def signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
-    await update.message.reply_text("Please enter your WhatsApp number and Telegram username in the format:\n`<WhatsApp number> <Telegram username>`")
-
-# Handle received user info during SignUp
-async def handle_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
-    user_info = update.message.text.split()
-
-    if len(user_info) == 2:
-        whatsapp_number, telegram_username = user_info
-        await update.message.reply_text(f"Your WhatsApp number: {whatsapp_number}\nYour Telegram username: {telegram_username}\nPlease confirm.", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Confirm", callback_data='confirm')]
-        ]))
-        context.user_data['whatsapp'] = whatsapp_number
-        context.user_data['username'] = telegram_username
+def signin(update: Update, context: CallbackContext):
+    chat_id = update.callback_query.message.chat_id
+    users = read_user_data()
+    user_found = any(str(chat_id) in line for line in users)
+    if user_found:
+        update.callback_query.answer()
+        update.callback_query.edit_message_text("Successfully Logged In.")
     else:
-        await update.message.reply_text("Invalid input. Please enter in the format: <WhatsApp number> <Telegram username>")
+        update.callback_query.answer()
+        update.callback_query.edit_message_text("Please Sign Up.")
 
-# Handle Confirm button (Save user data)
-async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
-    whatsapp = context.user_data.get('whatsapp')
-    username = context.user_data.get('username')
+# Handlers for the different states
+def handle_message(update: Update, context: CallbackContext):
+    if 'awaiting_signup' in context.user_data:
+        handle_signup_input(update, context)
 
-    if whatsapp and username:
-        cursor.execute("INSERT INTO users (chat_id, whatsapp, username) VALUES (%s, %s, %s)", (chat_id, whatsapp, username))
-        conn.commit()
-        await update.message.reply_text("SignUp successful! You can now log in.")
-    else:
-        await update.message.reply_text("Something went wrong. Please try again.")
+# Webhook setup
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('UTF-8')
+    update = Update.de_json(json_str, bot)
+    dispatcher.process_update(update)
+    return 'OK'
 
-# Handle Login button
-async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
-    cursor.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
-    result = cursor.fetchone()
+# Main function to set up the bot and Flask server
+def main():
+    token = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'  # Replace with your bot token
+    updater = Updater(token, use_context=True)
+    global bot
+    bot = updater.bot
+    dispatcher = updater.dispatcher
 
-    if result:
-        await update.message.reply_text("Successfully Logged In!")
-    else:
-        await update.message.reply_text("Please Sign Up first.")
+    # Command and callback handlers
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CallbackQueryHandler(signup, pattern="signup"))
+    dispatcher.add_handler(CallbackQueryHandler(signin, pattern="signin"))
+    dispatcher.add_handler(CallbackQueryHandler(confirm_signup, pattern="confirm_signup"))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
-# Setup Application and Handlers
-async def main():
-    application = ApplicationBuilder().token(TELEGRAM_API_KEY).build()
+    # Set webhook to your Render app
+    app_url = 'https://zapexypythom.onrender.com/7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'  # Replace with your Render webhook URL
+    bot.set_webhook(url=app_url)
 
-    # Handlers for different commands and actions
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CallbackQueryHandler(signup, pattern='signup'))
-    application.add_handler(CallbackQueryHandler(confirm, pattern='confirm'))
-    application.add_handler(CallbackQueryHandler(login, pattern='login'))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_info))
+    # Start the Flask server
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
-    # Set the webhook
-    await set_webhook()
-
-    # Start the bot with webhook
-    application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
-
-# FastAPI route to handle incoming updates
-@app.post("/webhook")
-async def webhook(request: requests):
-    json_str = await request.json()
-    update = Update.de_json(json_str, application.bot)
-    await application.process_update(update)
-
-# Run the application (in FastAPI)
-if __name__ == "__main__":
-    main()  # No asyncio.run() needed, let the framework manage the event loop
+if __name__ == '__main__':
+    main()
