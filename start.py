@@ -105,13 +105,9 @@ async def main():
     application.add_handler(CallbackQueryHandler(login, pattern='login'))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_info))
 
-    # Set the webhook
-    await set_webhook()
+    bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"Webhook set to {WEBHOOK_URL}")
 
-    # Start the bot with webhook
-    application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
-
-# Run the application
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+if __name__ == '__main__':
+    main()
+    app.run(host='0.0.0.0', port=5000)
