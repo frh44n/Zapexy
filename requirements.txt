@@ -1,1 +1,4 @@
-python-telegram-bot==20.3
+Flask
+psycopg2-binary
+python-telegram-bot==13.0
+python-dotenv
