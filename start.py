@@ -4,8 +4,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 import logging
-import asyncio
-from flask import Flask, request
 import requests
 
 # Load environment variables from .env file
@@ -54,6 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Handle SignUp button
 async def signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat.id
     await update.message.reply_text("Please enter your WhatsApp number and Telegram username in the format:\n`<WhatsApp number> <Telegram username>`")
 
 # Handle received user info during SignUp
@@ -93,7 +92,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if result:
         await update.message.reply_text("Successfully Logged In!")
     else:
- await update.message.reply_text("Please Sign Up first.")
+        await update.message.reply_text("Please Sign Up first.")
 
 # Setup Application and Handlers
 async def main():
@@ -108,8 +107,10 @@ async def main():
 
     # Set the webhook
     await set_webhook()
-    logger.info(f"Webhook set to {WEBHOOK_URL}")
 
-if __name__ == '__main__':
-    asyncio.run(main()) 
-    application.run(host='0.0.0.0', port=5000)
+    # Start the bot with webhook
+    application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
+
+# Run the application
+if __name__ == "__main__":
+    main()  # Don't use asyncio.run(), let the framework handle the event loop
