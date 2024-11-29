@@ -1,96 +1,83 @@
+import os
+import psycopg2
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
-from supabase import create_client, Client
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# Supabase configuration
-SUPABASE_URL = "https://ecfmwdaeekmhsjscrnol.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjZm13ZGFlZWttaHNqc2Nybm9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzI5MTA1NzMsImV4cCI6MjA0ODQ4NjU3M30.PbJKaSTLwfCXGxaph5HofBlFyCU1zQ8uhYEYHIDkg58"
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Set up database connection using environment variable
+DATABASE_URL = os.getenv("DATABASE_URL")
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+cur = conn.cursor()
 
-# Telegram bot handlers
-def start(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    keyboard = [
-        [InlineKeyboardButton("Sign In", callback_data='signin')],
-        [InlineKeyboardButton("Sign Up", callback_data='signup')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text("Welcome! Please choose an option:", reply_markup=reply_markup)
+# Start command: check if user is in the database
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    # Check if user is already in the database
+    cur.execute("SELECT * FROM users WHERE chat_id = %s", (user_id,))
+    user = cur.fetchone()
 
-def handle_button(update: Update, context: CallbackContext):
-    query = update.callback_query
-    chat_id = query.message.chat.id
+    if user:
+        # If user exists, show SignIn and SignUp buttons
+        buttons = [
+            [InlineKeyboardButton("Sign In", callback_data="signin")],
+            [InlineKeyboardButton("Sign Up", callback_data="signup")]
+        ]
+        reply_markup = InlineKeyboardMarkup(buttons)
+        await update.message.reply_text("Welcome back! Choose an option:", reply_markup=reply_markup)
+    else:
+        await update.message.reply_text("You are not registered yet. Please Sign Up.")
 
-    if query.data == "signin":
-        # Check if chat ID exists in the database
-        response = supabase.table("users").select("id").eq("id", chat_id).execute()
-        if response.data:
-            query.edit_message_text("Successfully Logged In.")
-        else:
-            query.edit_message_text("Please Sign Up first.")
+# Handle SignUp button press: ask for WhatsApp number
+async def signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    # Ask for WhatsApp number
+    await update.message.reply_text("Please enter your WhatsApp number:")
+
+# Handle WhatsApp number input
+async def handle_signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
+    context.user_data["whatsapp"] = user_input
+    # Ask for Telegram username
+    await update.message.reply_text("Please enter your Telegram username:")
+
+# Handle Telegram username input and save to database
+async def handle_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    username = update.message.text
+    whatsapp = context.user_data["whatsapp"]
     
-    elif query.data == "signup":
-        context.user_data["step"] = "awaiting_details"
-        query.edit_message_text(
-            "Please enter your WhatsApp number and Telegram username in this format:\n\n"
-            "`<WhatsApp Number>, <Telegram Username>`", 
-            parse_mode="Markdown"
-        )
+    user_id = update.effective_user.id
+    # Save the user data into the PostgreSQL database
+    cur.execute("INSERT INTO users (chat_id, whatsapp, username) VALUES (%s, %s, %s)", (user_id, whatsapp, username))
+    conn.commit()
 
-def handle_message(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    text = update.message.text
+    await update.message.reply_text(f"User {username} registered successfully!")
 
-    if context.user_data.get("step") == "awaiting_details":
-        try:
-            whatsapp_number, telegram_username = map(str.strip, text.split(','))
-            context.user_data["details"] = {
-                "id": chat_id,
-                "whatsapp": whatsapp_number,
-                "telegram": telegram_username
-            }
-            context.user_data["step"] = "confirm"
-            keyboard = [[InlineKeyboardButton("Confirm", callback_data='confirm')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(
-                f"Please confirm your details:\n\nWhatsApp: {whatsapp_number}\nTelegram: {telegram_username}",
-                reply_markup=reply_markup
-            )
-        except ValueError:
-            update.message.reply_text(
-                "Invalid format! Please use:\n\n`<WhatsApp Number>, <Telegram Username>`", 
-                parse_mode="Markdown"
-            )
+# Handle SignIn button press: check if user exists
+async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    # Check if user exists in the database
+    cur.execute("SELECT * FROM users WHERE chat_id = %s", (user_id,))
+    user = cur.fetchone()
+
+    if user:
+        await update.message.reply_text("Successfully logged in!")
     else:
-        update.message.reply_text("Please use the /start command.")
+        await update.message.reply_text("Please sign up first.")
 
-def confirm_details(update: Update, context: CallbackContext):
-    query = update.callback_query
-    chat_id = query.message.chat.id
+# Main function to start the bot
+async def main():
+    # Set up the Telegram bot application
+    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
 
-    if context.user_data.get("step") == "confirm":
-        details = context.user_data.pop("details", {})
-        # Save details to Supabase
-        response = supabase.table("users").upsert(details).execute()
-        if response.status_code == 201:
-            query.edit_message_text("Your details have been saved successfully.")
-        else:
-            query.edit_message_text("Failed to save your details. Please try again.")
-    else:
-        query.edit_message_text("No details to confirm. Please start with Sign Up.")
+    # Add handlers for the commands and buttons
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(signup, pattern="signup"))
+    app.add_handler(CallbackQueryHandler(login, pattern="signin"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_signup))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_username))
 
-def main():
-    updater = Updater("7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg", use_context=True)
-    dispatcher = updater.dispatcher
-
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CallbackQueryHandler(handle_button))
-    dispatcher.add_handler(CallbackQueryHandler(confirm_details, pattern="^confirm$"))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-
-    print("Bot is running...")
-    updater.start_polling()
-    updater.idle()
+    # Run the bot
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
