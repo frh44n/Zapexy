@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 import os
 import psycopg2
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
