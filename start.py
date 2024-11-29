@@ -64,7 +64,7 @@ async def confirm_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("No details to confirm. Please start with Sign Up.")
 
 def main():
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+    app = ApplicationBuilder().token("7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg").build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_button))
