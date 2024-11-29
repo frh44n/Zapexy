@@ -110,9 +110,6 @@ async def main():
     # Set the webhook
     await set_webhook()
 
-    # Start the bot with webhook
-    application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
-
-# Run the application
-if __name__ == "__main__":
-    asyncio.run(main())  # <-- Use asyncio.run(main()) to properly await the main coroutine
+    await application.run_polling()
+    if__name__ == "__main__":
+    asyncio.get_event_loop().run_until_complete(main())
