@@ -1,84 +1,117 @@
-from dotenv import load_dotenv
 import os
 import psycopg2
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from dotenv import load_dotenv
+from supabase import create_client, Client
+import logging
 
-# Set up database connection using environment variable
+# Load environment variables from .env file
+load_dotenv()
+
+# Telegram API Key from .env
+TELEGRAM_API_KEY = os.getenv("TELEGRAM_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+# Setup logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Database Connection
 conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-cur = conn.cursor()
+cursor = conn.cursor()
 
-# Start command: check if user is in the database
+# Webhook function
+async def set_webhook():
+    url = f"https://api.telegram.org/bot{TELEGRAM_API_KEY}/setWebhook?url={WEBHOOK_URL}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        print("Webhook set successfully.")
+    else:
+        print(f"Error setting webhook: {response.text}")
+
+# Handle '/start' command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    # Check if user is already in the database
-    cur.execute("SELECT * FROM users WHERE chat_id = %s", (user_id,))
-    user = cur.fetchone()
+    chat_id = update.message.chat.id
+    cursor.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
+    result = cursor.fetchone()
 
-    if user:
-        # If user exists, show SignIn and SignUp buttons
+    if result:
         buttons = [
-            [InlineKeyboardButton("Sign In", callback_data="signin")],
-            [InlineKeyboardButton("Sign Up", callback_data="signup")]
+            [InlineKeyboardButton("Login", callback_data='login')],
+            [InlineKeyboardButton("SignUp", callback_data='signup')]
         ]
-        reply_markup = InlineKeyboardMarkup(buttons)
-        await update.message.reply_text("Welcome back! Choose an option:", reply_markup=reply_markup)
     else:
-        await update.message.reply_text("You are not registered yet. Please Sign Up.")
+        buttons = [
+            [InlineKeyboardButton("SignUp", callback_data='signup')]
+        ]
 
-# Handle SignUp button press: ask for WhatsApp number
+    reply_markup = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text("Welcome! Please choose an option:", reply_markup=reply_markup)
+
+# Handle SignUp button
 async def signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    # Ask for WhatsApp number
-    await update.message.reply_text("Please enter your WhatsApp number:")
+    chat_id = update.message.chat.id
+    await update.message.reply_text("Please enter your WhatsApp number and Telegram username in the format:\n`<WhatsApp number> <Telegram username>`")
 
-# Handle WhatsApp number input
-async def handle_signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text
-    context.user_data["whatsapp"] = user_input
-    # Ask for Telegram username
-    await update.message.reply_text("Please enter your Telegram username:")
+# Handle received user info during SignUp
+async def handle_user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat.id
+    user_info = update.message.text.split()
 
-# Handle Telegram username input and save to database
-async def handle_username(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    username = update.message.text
-    whatsapp = context.user_data["whatsapp"]
-    
-    user_id = update.effective_user.id
-    # Save the user data into the PostgreSQL database
-    cur.execute("INSERT INTO users (chat_id, whatsapp, username) VALUES (%s, %s, %s)", (user_id, whatsapp, username))
-    conn.commit()
-
-    await update.message.reply_text(f"User {username} registered successfully!")
-
-# Handle SignIn button press: check if user exists
-async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    # Check if user exists in the database
-    cur.execute("SELECT * FROM users WHERE chat_id = %s", (user_id,))
-    user = cur.fetchone()
-
-    if user:
-        await update.message.reply_text("Successfully logged in!")
+    if len(user_info) == 2:
+        whatsapp_number, telegram_username = user_info
+        await update.message.reply_text(f"Your WhatsApp number: {whatsapp_number}\nYour Telegram username: {telegram_username}\nPlease confirm.", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("Confirm", callback_data='confirm')]
+        ]))
+        context.user_data['whatsapp'] = whatsapp_number
+        context.user_data['username'] = telegram_username
     else:
-        await update.message.reply_text("Please sign up first.")
+        await update.message.reply_text("Invalid input. Please enter in the format: <WhatsApp number> <Telegram username>")
 
-# Main function to start the bot
+# Handle Confirm button (Save user data)
+async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat.id
+    whatsapp = context.user_data.get('whatsapp')
+    username = context.user_data.get('username')
+
+    if whatsapp and username:
+        cursor.execute("INSERT INTO users (chat_id, whatsapp, username) VALUES (%s, %s, %s)", (chat_id, whatsapp, username))
+        conn.commit()
+        await update.message.reply_text("SignUp successful! You can now log in.")
+    else:
+        await update.message.reply_text("Something went wrong. Please try again.")
+
+# Handle Login button
+async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat.id
+    cursor.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
+    result = cursor.fetchone()
+
+    if result:
+        await update.message.reply_text("Successfully Logged In!")
+    else:
+        await update.message.reply_text("Please Sign Up first.")
+
+# Setup Application and Handlers
 async def main():
-    # Set up the Telegram bot application
-    app = ApplicationBuilder().token("7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg").build()
+    application = ApplicationBuilder().token(TELEGRAM_API_KEY).build()
 
-    # Add handlers for the commands and buttons
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(signup, pattern="signup"))
-    app.add_handler(CallbackQueryHandler(login, pattern="signin"))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_signup))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_username))
+    # Handlers for different commands and actions
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CallbackQueryHandler(signup, pattern='signup'))
+    application.add_handler(CallbackQueryHandler(confirm, pattern='confirm'))
+    application.add_handler(CallbackQueryHandler(login, pattern='login'))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_info))
 
-    # Run the bot
-    await app.run_polling()
+    # Set the webhook
+    await set_webhook()
 
+    # Start the bot with webhook
+    application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
+
+# Run the application
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
