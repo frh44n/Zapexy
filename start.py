@@ -118,7 +118,7 @@ async def main():
 
 # FastAPI route to handle incoming updates
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Requests):
     json_str = await request.json()
     update = Update.de_json(json_str, application.bot)
     await application.process_update(update)
