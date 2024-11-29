@@ -3,7 +3,6 @@ import psycopg2
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from supabase import create_client, Client
 import logging
 
 # Load environment variables from .env file
