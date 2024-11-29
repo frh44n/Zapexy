@@ -66,7 +66,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Main function to start the bot
 async def main():
     # Set up the Telegram bot application
-    app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+    app = ApplicationBuilder().token("7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg").build()
 
     # Add handlers for the commands and buttons
     app.add_handler(CommandHandler("start", start))
