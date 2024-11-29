@@ -1,6 +1,6 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, CallbackContext
 from telegram.ext import filters
 from flask import Flask, request
 import os
@@ -36,25 +36,25 @@ def save_user_data(chat_id, data):
         logger.error(f"Error saving user data: {e}")
 
 # Command handlers
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
     keyboard = [
         [InlineKeyboardButton("Signin", callback_data="signin")],
         [InlineKeyboardButton("Signup", callback_data="signup")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Welcome! Choose an option:', reply_markup=reply_markup)
+    await update.message.reply_text('Welcome! Choose an option:', reply_markup=reply_markup)
 
-def signup(update: Update, context: CallbackContext):
+async def signup(update: Update, context: CallbackContext):
     keyboard = [
         [InlineKeyboardButton("Back", callback_data="start")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.callback_query.answer()
-    update.callback_query.edit_message_text('Please enter your WhatsApp number and Telegram username (separate by comma):', reply_markup=reply_markup)
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text('Please enter your WhatsApp number and Telegram username (separate by comma):', reply_markup=reply_markup)
     return 'awaiting_signup'
 
-def handle_signup_input(update: Update, context: CallbackContext):
+async def handle_signup_input(update: Update, context: CallbackContext):
     user_input = update.message.text
     if "," in user_input:
         whatsapp, telegram_username = user_input.split(",", 1)
@@ -66,32 +66,32 @@ def handle_signup_input(update: Update, context: CallbackContext):
             [InlineKeyboardButton("Back", callback_data="start")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text('Confirm your information:', reply_markup=reply_markup)
+        await update.message.reply_text('Confirm your information:', reply_markup=reply_markup)
     else:
-        update.message.reply_text('Invalid input. Please enter your WhatsApp number and Telegram username, separated by a comma.')
+        await update.message.reply_text('Invalid input. Please enter your WhatsApp number and Telegram username, separated by a comma.')
 
-def confirm_signup(update: Update, context: CallbackContext):
+async def confirm_signup(update: Update, context: CallbackContext):
     chat_id = update.callback_query.message.chat_id
     data = context.user_data
     save_user_data(chat_id, data)
-    update.callback_query.answer()
-    update.callback_query.edit_message_text("Signup successful. You can now login.")
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text("Signup successful. You can now login.")
 
-def signin(update: Update, context: CallbackContext):
+async def signin(update: Update, context: CallbackContext):
     chat_id = update.callback_query.message.chat_id
     users = read_user_data()
     user_found = any(str(chat_id) in line for line in users)
     if user_found:
-        update.callback_query.answer()
-        update.callback_query.edit_message_text("Successfully Logged In.")
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("Successfully Logged In.")
     else:
-        update.callback_query.answer()
-        update.callback_query.edit_message_text("Please Sign Up.")
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("Please Sign Up.")
 
 # Handlers for the different states
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: CallbackContext):
     if 'awaiting_signup' in context.user_data:
-        handle_signup_input(update, context)
+        await handle_signup_input(update, context)
 
 # Webhook setup
 @app.route('/webhook', methods=['POST'])
@@ -104,17 +104,17 @@ def webhook():
 # Main function to set up the bot and Flask server
 def main():
     token = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'  # Replace with your bot token
-    updater = Updater(token, use_context=True)
+    application = Application.builder().token(token).build()
+
     global bot
-    bot = updater.bot
-    dispatcher = updater.dispatcher
+    bot = application.bot
 
     # Command and callback handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CallbackQueryHandler(signup, pattern="signup"))
-    dispatcher.add_handler(CallbackQueryHandler(signin, pattern="signin"))
-    dispatcher.add_handler(CallbackQueryHandler(confirm_signup, pattern="confirm_signup"))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(signup, pattern="signup"))
+    application.add_handler(CallbackQueryHandler(signin, pattern="signin"))
+    application.add_handler(CallbackQueryHandler(confirm_signup, pattern="confirm_signup"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Set webhook to your Render app
     app_url = 'https://zapexypythom.onrender.com/7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'  # Replace with your Render webhook URL
