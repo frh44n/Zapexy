@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
 import logging
@@ -54,7 +54,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Handle SignUp button
 async def signup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat.id
     await update.message.reply_text("Please enter your WhatsApp number and Telegram username in the format:\n`<WhatsApp number> <Telegram username>`")
 
 # Handle received user info during SignUp
@@ -94,7 +93,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if result:
         await update.message.reply_text("Successfully Logged In!")
     else:
-        await update.message.reply_text("Please Sign Up first.")
+ await update.message.reply_text("Please Sign Up first.")
 
 # Setup Application and Handlers
 async def main():
@@ -108,9 +107,9 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_info))
 
     # Set the webhook
-    bot.set_webhook(WEBHOOK_URL)
+    await set_webhook()
     logger.info(f"Webhook set to {WEBHOOK_URL}")
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main()) 
     application.run(host='0.0.0.0', port=5000)
