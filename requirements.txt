@@ -1,4 +1,4 @@
 Flask
 psycopg2-binary
 python-telegram-bot>=20.0
-supabase-py
+
