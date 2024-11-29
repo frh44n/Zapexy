@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # GitHub user.txt file location
-USER_FILE_PATH = "https://github.com/frh44n/Zapexy/blob/main/user.txt"
+USER_FILE_PATH = "https://raw.githubusercontent.com/frh44n/Zapexy/main/user.txt"
 
 # Helper functions to read and write user data
 def read_user_data():
