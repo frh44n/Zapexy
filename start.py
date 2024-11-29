@@ -5,7 +5,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 from dotenv import load_dotenv
 import logging
 import asyncio
-from flask import Flask, requests
+from flask import Flask, request
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
