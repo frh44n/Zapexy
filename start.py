@@ -5,11 +5,13 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 from dotenv import load_dotenv
 import logging
 import requests
+from fastapi import FastAPI
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Telegram API Key from .env
+# Telegram API Key and Webhook URL from .env
 TELEGRAM_API_KEY = os.getenv("TELEGRAM_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
@@ -21,6 +23,9 @@ logger = logging.getLogger(__name__)
 # Database Connection
 conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 cursor = conn.cursor()
+
+# FastAPI application
+app = FastAPI()
 
 # Webhook function
 async def set_webhook():
@@ -111,6 +116,13 @@ async def main():
     # Start the bot with webhook
     application.run_webhook(listen="0.0.0.0", port=5000, url_path='webhook', webhook_url=WEBHOOK_URL)
 
-# Run the application
+# FastAPI route to handle incoming updates
+@app.post("/webhook")
+async def webhook(request: Request):
+    json_str = await request.json()
+    update = Update.de_json(json_str, application.bot)
+    await application.process_update(update)
+
+# Run the application (in FastAPI)
 if __name__ == "__main__":
-    main()  # Don't use asyncio.run(), let the framework handle the event loop
+    main()  # No asyncio.run() needed, let the framework manage the event loop
