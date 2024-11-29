@@ -117,7 +117,7 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Set webhook to your Render app
-    app_url = 'https://zapexypythom.onrender.com/7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'  # Replace with your Render webhook URL
+    app_url = 'https://zapexypythom.onrender.com/webhook'  # Replace with your Render webhook URL
     bot.set_webhook(url=app_url)
 
     # Start the Flask server
