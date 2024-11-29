@@ -108,8 +108,9 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_info))
 
     # Set the webhook
-    await set_webhook()
+    bot.set_webhook(WEBHOOK_URL)
+    logger.info(f"Webhook set to {WEBHOOK_URL}")
 
-    await application.run_polling()
-    if__name__ == "__main__":
-    asyncio.get_event_loop().run_until_complete(main())
+if __name__ == '__main__':
+    main()
+    app.run(host='0.0.0.0', port=5000)
