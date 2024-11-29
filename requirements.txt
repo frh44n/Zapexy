@@ -1,6 +1,2 @@
-python-telegram-bot==20.0
-psycopg2-binary==2.9.3
-fastapi==0.100.0
-uvicorn==0.18.2
-requests==2.28.2
-python-dotenv==0.20.0
+python-telegram-bot
+Flask
