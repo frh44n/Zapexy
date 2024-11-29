@@ -1,3 +1,4 @@
+import asyncio
 Flask
 psycopg2
 python-telegram-bot>=20.0
