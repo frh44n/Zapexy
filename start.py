@@ -1,6 +1,6 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, CallbackContext, Dispatcher
+from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, CallbackContext,
 from flask import Flask, request
 import os
 import requests
