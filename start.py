@@ -8,7 +8,7 @@ import psycopg2
 logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'
-DATABASE_URL = 'postgres://default:gaFjrs9b4oLK@ep-ancient-smoke-a1pliqaw.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require'
+DATABASE_URL = 'psql "postgres://default:gaFjrs9b4oLK@ep-ancient-smoke-a1pliqaw.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require"'
 ADMIN_CHAT_ID = 6826870863
 PORT = int(os.environ.get('PORT', '8443'))
 RENDER_URL = 'https://zapexypythom.onrender.com/'
