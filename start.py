@@ -140,13 +140,12 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member))
 
     # Start the Bot
-    await application.run_webhook(
-        listen='0.0.0.0',
-        port=int(os.environ.get('PORT', '8443')),
-        url_path=os.environ['BOT_TOKEN'],
-        webhook_url=f"{os.environ['RENDER_URL']}/{os.environ['BOT_TOKEN']}"
-    )
+    updater.start_webhook(listen='0.0.0.0',
+                          port=int(os.environ.get('PORT', '8443')),
+                          url_path=os.environ['BOT_TOKEN'])
+    updater.bot.setWebhook(f"{os.environ['RENDER_URL']}/{os.environ['BOT_TOKEN']}")
+
+    updater.idle()
 
 if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+    main()
