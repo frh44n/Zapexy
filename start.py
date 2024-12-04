@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ApplicationBuilder, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import psycopg2
 
 # Initialize logging
@@ -72,11 +72,11 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         command = update.message.text.split(' ', 1)
         if len(command) == 2:
             message = command[1]
-            if command[0] == '/user-text':
+            if command[0] == '/usertext':
                 user_id = int(message.split(' ')[0])
                 text = ' '.join(message.split(' ')[1:])
                 await context.bot.send_message(chat_id=user_id, text=text)
-            elif command[0] == '/all-text':
+            elif command[0] == '/alltext':
                 with conn.cursor() as cur:
                     cur.execute("SELECT chat_id FROM users")
                     user_ids = cur.fetchall()
@@ -89,8 +89,8 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CommandHandler('user-text', admin_broadcast))
-    application.add_handler(CommandHandler('all-text', admin_broadcast))
+    application.add_handler(CommandHandler('usertext', admin_broadcast))
+    application.add_handler(CommandHandler('alltext', admin_broadcast))
 
     application.run_webhook(listen='0.0.0.0', port=int(PORT), url_path=BOT_TOKEN, webhook_url=RENDER_URL + BOT_TOKEN)
 
