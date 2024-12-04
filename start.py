@@ -1,4 +1,5 @@
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import psycopg2
@@ -9,6 +10,8 @@ logging.basicConfig(level=logging.INFO)
 BOT_TOKEN = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'
 DATABASE_URL = 'postgres://default:gaFjrs9b4oLK@ep-ancient-smoke-a1pliqaw.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require'
 ADMIN_CHAT_ID = 6826870863
+PORT = int(os.environ.get('PORT', '8443'))
+RENDER_URL = 'https://zapexypythom.onrender.com/'
 
 # Database connection
 conn = psycopg2.connect(DATABASE_URL, sslmode='require')
@@ -92,7 +95,7 @@ def main() -> None:
     application.add_handler(CommandHandler('usertext', admin_broadcast))
     application.add_handler(CommandHandler('alltext', admin_broadcast))
 
-    application.run_webhook(listen='0.0.0.0', port=int(PORT), url_path=BOT_TOKEN, webhook_url=RENDER_URL + BOT_TOKEN)
+    application.run_webhook(listen='0.0.0.0', port=PORT, url_path=BOT_TOKEN, webhook_url=RENDER_URL + BOT_TOKEN)
 
 if __name__ == '__main__':
     main()
