@@ -3,13 +3,16 @@ import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import psycopg2
-from psycopg2 import sql
+from dotenv import load_dotenv
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
+# Load environment variables from .env file
+load_dotenv()
+
 BOT_TOKEN = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'
-DATABASE_URL = 'postgres://default:gaFjrs9b4oLK@ep-ancient-smoke-a1pliqaw.ap-southeast-1.aws.neon.tech:5432/verceldb?sslmode=require'
+DATABASE_URL = os.getenv('POSTGRES_URL')
 PORT = int(os.environ.get('PORT', '8443'))
 RENDER_URL = 'https://zapexypythom.onrender.com/'
 ADMIN_CHAT_ID = '6826870863'  # Replace with your admin chat ID
@@ -75,6 +78,8 @@ async def confirm_signup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     telegram_username = context.user_data['telegram_username']
     
     try:
+        logging.info(f"Confirming signup for chat_id: {chat_id}, WhatsApp Number: {whatsapp_number}, Telegram Username: {telegram_username}")
+        
         with conn.cursor() as cur:
             cur.execute("INSERT INTO users (chat_id, whatsapp_number, telegram_username) VALUES (%s, %s, %s) ON CONFLICT (chat_id) DO NOTHING", (chat_id, whatsapp_number, telegram_username))
             conn.commit()
