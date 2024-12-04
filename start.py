@@ -1,167 +1,154 @@
 import logging
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import psycopg2
-from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
-
-# Load environment variables from .env file
-load_dotenv()
-
-BOT_TOKEN = '7766655798:AAHacsx-GCkJDBI6FYAiNpNH96IFPTaDHkg'
-DATABASE_URL = os.getenv('POSTGRES_URL')
-PORT = int(os.environ.get('PORT', '8443'))
-RENDER_URL = 'https://zapexypythom.onrender.com/'
-ADMIN_CHAT_ID = '6826870863'  # Replace with your admin chat ID
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Database connection
-try:
-    conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-    logging.info("Database connection established.")
-except Exception as e:
-    logging.error(f"Error connecting to the database: {e}")
+DATABASE_URL = os.environ['DATABASE_URL']
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.message.chat_id
-    
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE chat_id=%s", (chat_id,))
-            user = cur.fetchone()
-        
-        if user:
-            await update.message.reply_text('Welcome back! You are already registered.')
-        else:
-            await update.message.reply_text("You're most welcome. Click /signup for Account Registration.")
-            context.user_data['status'] = 'signup_prompt'
-    except Exception as e:
-        logging.error(f"Error during start command: {e}")
-
-async def signup_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# Define a few command handlers. These usually take the two arguments update and context.
+def start(update: Update, context: CallbackContext) -> None:
     keyboard = [
-        [InlineKeyboardButton("Sign In", callback_data='signin')],
-        [InlineKeyboardButton("Sign Up", callback_data='signup')]
+        [InlineKeyboardButton("Sign In", callback_data='signin'),
+         InlineKeyboardButton("Sign Up", callback_data='signup')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Please choose an option:', reply_markup=reply_markup)
+    update.message.reply_text('Please choose:', reply_markup=reply_markup)
 
-async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    await query.answer()
+    query.answer()
 
-    logging.info(f"Callback query data: {query.data}")
-    logging.info(f"Context user data before handling callback: {context.user_data}")
-    
-    if query.data == 'signup':
-        context.user_data['status'] = 'signup'
-        await query.message.reply_text('Please enter your WhatsApp number:')
-    elif query.data == 'signin':
-        await check_login(update, context)
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logging.info(f"Received message: {update.message.text}")
-    logging.info(f"Context user data: {context.user_data}")
-
-    if 'status' in context.user_data and context.user_data['status'] == 'signup':
-        if 'whatsapp_number' not in context.user_data:
-            context.user_data['whatsapp_number'] = update.message.text
-            await update.message.reply_text('Please enter your Telegram username:')
+    if query.data == 'signin':
+        # SignIn logic here
+        chat_id = query.message.chat_id
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE chat_id = %s", (chat_id,))
+        result = cursor.fetchone()
+        if result:
+            query.edit_message_text(text="Successfully Logged In")
         else:
-            context.user_data['telegram_username'] = update.message.text
-            keyboard = [[InlineKeyboardButton("Confirm", callback_data='confirm_signup')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(f"Confirm your details:\nWhatsApp Number: {context.user_data['whatsapp_number']}\nTelegram Username: {context.user_data['telegram_username']}", reply_markup=reply_markup)
+            query.edit_message_text(text="Please Sign Up.")
+        cursor.close()
 
-async def confirm_signup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    
-    chat_id = query.message.chat_id
-    whatsapp_number = context.user_data.get('whatsapp_number', 'N/A')
-    telegram_username = context.user_data.get('telegram_username', 'N/A')
+    elif query.data == 'signup':
+        # SignUp logic here
+        query.edit_message_text(text="Please enter your WhatsApp Number, Telegram Username, and PhonePe Number in the format: /signup <whatsapp> <username> <phonepe>")
 
-    logging.info(f"Confirming signup for chat_id: {chat_id}, WhatsApp Number: {whatsapp_number}, Telegram Username: {telegram_username}")
-    
+def signup(update: Update, context: CallbackContext) -> None:
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO users (chat_id, whatsapp_number, telegram_username) VALUES (%s, %s, %s) ON CONFLICT (chat_id) DO NOTHING",
-                (chat_id, whatsapp_number, telegram_username)
-            )
+        whatsapp_number, telegram_username, phonepe_number = context.args
+        chat_id = update.message.chat_id
+
+        keyboard = [[InlineKeyboardButton("Confirm", callback_data='confirm')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        context.user_data['user_info'] = (chat_id, whatsapp_number, telegram_username, phonepe_number)
+        update.message.reply_text(f"Confirm your details:\nWhatsApp: {whatsapp_number}\nTelegram Username: {telegram_username}\nPhonePe: {phonepe_number}", reply_markup=reply_markup)
+    except ValueError:
+        update.message.reply_text('Please enter the details in the correct format: /signup <whatsapp> <username> <phonepe>')
+
+def confirm(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    query.answer()
+
+    chat_id, whatsapp_number, telegram_username, phonepe_number = context.user_data['user_info']
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO users (chat_id, whatsapp_number, telegram_username, phonepe_number) VALUES (%s, %s, %s, %s)",
+                   (chat_id, whatsapp_number, telegram_username, phonepe_number))
+    conn.commit()
+    cursor.close()
+    query.edit_message_text(text="You have successfully signed up!")
+
+def handle_new_member(update: Update, context: CallbackContext) -> None:
+    for new_member in update.message.new_chat_members:
+        chat_id = update.message.chat_id
+        whatsapp_number, telegram_username, phonepe_number = context.user_data.get(new_member.id, ("Unknown", "Unknown", "Unknown"))
+        admin_chat_id = 6826870863  # Admin chat ID
+        context.bot.send_message(chat_id=admin_chat_id, text=f"New User Joined\nUser ID: {new_member.id}\nWhatsApp Number: {whatsapp_number}")
+
+def broadcast_message(update: Update, context: CallbackContext) -> None:
+    message = ' '.join(context.args)
+    chat_id = update.message.chat_id
+    cursor = conn.cursor()
+    cursor.execute("SELECT chat_id FROM users")
+    results = cursor.fetchall()
+    for user in results:
+        context.bot.send_message(chat_id=user[0], text=message)
+    cursor.close()
+
+def add_balance(update: Update, context: CallbackContext) -> None:
+    try:
+        chat_id, amount = context.args
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET deposit_balance = deposit_balance + %s WHERE chat_id = %s", (amount, chat_id))
+        conn.commit()
+        cursor.close()
+        context.bot.send_message(chat_id=chat_id, text="Your Deposit Balance has been updated.")
+    except ValueError:
+        update.message.reply_text('Please enter the command in the correct format: /add <chat_id> <amount>')
+
+def withdraw(update: Update, context: CallbackContext) -> None:
+    chat_id = update.message.chat_id
+    cursor = conn.cursor()
+    cursor.execute("SELECT earning_balance FROM users WHERE chat_id = %s", (chat_id,))
+    result = cursor.fetchone()
+    if result and result[0] >= 5:
+        update.message.reply_text('How much would you like to withdraw?')
+        context.user_data['withdraw'] = True
+    else:
+        update.message.reply_text('Minimum amount required to withdraw is 5')
+    cursor.close()
+
+def handle_withdraw_amount(update: Update, context: CallbackContext) -> None:
+    if context.user_data.get('withdraw'):
+        amount = float(update.message.text)
+        chat_id = update.message.chat_id
+        cursor = conn.cursor()
+        cursor.execute("SELECT earning_balance, phonepe_number FROM users WHERE chat_id = %s", (chat_id,))
+        result = cursor.fetchone()
+        if result and result[0] >= amount:
+            context.bot.send_message(chat_id=6826870863, text=f"Withdrawal Request\nUser ID: {chat_id}\nEarning Balance: {result[0]}\nWithdrawal Request: {amount}\nPhonePe Number: {result[1]}")
+            cursor.execute("UPDATE users SET earning_balance = earning_balance - %s WHERE chat_id = %s", (amount, chat_id))
             conn.commit()
-        
-        logging.info("User information inserted successfully.")
-        await query.message.reply_text('You have successfully signed up!')
-        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=f"New User Joined: WhatsApp Number: {whatsapp_number}, Telegram Username: {telegram_username}")
-    except Exception as e:
-        logging.error(f"Error during confirm_signup: {e}")
-        await query.message.reply_text('There was an error during sign up. Please try again.')
-
-async def check_login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.callback_query.message.chat_id
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE chat_id=%s", (chat_id,))
-            user = cur.fetchone()
-        
-        if user:
-            await update.callback_query.message.reply_text('Successfully Logged In')
+            update.message.reply_text("Your withdrawal request has been submitted.")
         else:
-            await update.callback_query.message.reply_text('Please Sign Up')
-    except Exception as e:
-        logging.error(f"Error during check_login: {e}")
-        await update.callback_query.message.reply_text('There was an error during login. Please try again.')
-
-async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat_id == int(ADMIN_CHAT_ID):
-        command = update.message.text.split(' ', 1)
-        if len(command) == 2:
-            message = command[1]
-            if command[0] == '/usertext':
-                user_id = int(message.split(' ')[0])
-                text = ' '.join(message.split(' ')[1:])
-                await context.bot.send_message(chat_id=user_id, text=text)
-            elif command[0] == '/alltext':
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute("SELECT chat_id FROM users")
-                        user_ids = cur.fetchall()
-                    for user_id in user_ids:
-                        await context.bot.send_message(chat_id=user_id[0], text=message)
-                except Exception as e:
-                    logging.error(f"Error during admin_broadcast: {e}")
-
-async def delete_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.chat_id == int(ADMIN_CHAT_ID):
-        command = update.message.text.split(' ', 1)
-        if len(command) == 2:
-            user_id = int(command[1])
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM users WHERE chat_id = %s", (user_id,))
-                    conn.commit()
-                await update.message.reply_text(f"User with chat_id {user_id} has been deleted.")
-            except Exception as e:
-                logging.error(f"Error during delete_user: {e}")
-                await update.message.reply_text('There was an error deleting the user. Please try again.')
-        else:
-            await update.message.reply_text("Please provide the chat_id of the user you want to delete. Usage: /deleteuser <chat_id>")
+            update.message.reply_text('Insufficient balance.')
+        cursor.close()
+        context.user_data['withdraw'] = False
 
 def main() -> None:
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    # Create the Updater and pass it your bot's token.
+    updater = Updater(os.environ['BOT_TOKEN'])
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("signup", signup_prompt))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CommandHandler('usertext', admin_broadcast))
-    application.add_handler(CommandHandler('alltext', admin_broadcast))
-    application.add_handler(CommandHandler('deleteuser', delete_user))
+    # Get the dispatcher to register handlers
+    dispatcher = updater.dispatcher
 
-    application.run_webhook(listen='0.0.0.0', port=PORT, url_path=BOT_TOKEN, webhook_url=RENDER_URL + BOT_TOKEN)
+    # on different commands - answer in Telegram
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CallbackQueryHandler(button))
+    dispatcher.add_handler(CommandHandler("signup", signup))
+    dispatcher.add_handler(CallbackQueryHandler(confirm))
+    dispatcher.add_handler(CommandHandler("broadcast", broadcast_message))
+    dispatcher.add_handler(CommandHandler("add", add_balance))
+    dispatcher.add_handler(CommandHandler("withdraw", withdraw))
+    dispatcher.add_handler(MessageHandler(Filters.text & Filters.regex(r'\d+'), handle_withdraw_amount))
+    dispatcher.add_handler(MessageHandler(Filters.status_update.new_chat_members, handle_new_member))
+
+    # Start the Bot
+    updater.start_webhook(listen='0.0.0.0',
+                          port=int(os.environ.get('PORT', '8443')),
+                          url_path=os.environ['BOT_TOKEN'])
+    updater.bot.setWebhook(f"{os.environ['RENDER_URL']}/{os.environ['BOT_TOKEN']}")
+
+    updater.idle()
 
 if __name__ == '__main__':
     main()
